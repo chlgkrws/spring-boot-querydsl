@@ -1,0 +1,11 @@
+QueryDSL/
+.gradle/
+.idea/
+build/
+gradle/
+out/
+gradlew
+gradle/
+settings.gradle
+gradlew.bat
+gradlew
