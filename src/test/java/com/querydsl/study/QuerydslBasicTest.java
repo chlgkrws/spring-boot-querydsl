@@ -2,9 +2,11 @@ package com.querydsl.study;
 
 import com.querydsl.core.NonUniqueResultException;
 import com.querydsl.core.QueryResults;
+import com.querydsl.core.Tuple;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.querydsl.study.entity.Member;
 import com.querydsl.study.entity.QMember;
+import com.querydsl.study.entity.QTeam;
 import com.querydsl.study.entity.Team;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,6 +20,7 @@ import javax.persistence.PersistenceContext;
 import java.util.List;
 
 import static com.querydsl.study.entity.QMember.*;
+import static com.querydsl.study.entity.QTeam.team;
 import static org.assertj.core.api.Assertions.*;
 
 @SpringBootTest
@@ -191,6 +194,127 @@ public class QuerydslBasicTest {
         assertThat(member1.getUsername()).isEqualTo("member5");
         assertThat(member2.getUsername()).isNull();
     }
+
+    /**
+     * 페이징 - 조회 건수 제한
+     */
+    @Test
+    public void paging1() {
+        List<Member> fetch = queryFactory
+                .selectFrom(member)
+                .orderBy(member.username.desc())
+                .offset(1)
+                .limit(2)
+                .fetch();
+
+        assertThat(fetch.size()).isEqualTo(2);
+        System.out.println("fetch = " + fetch);
+    }
+
+    /**
+     * 페이징 - 전체 조회 수가 필요하면?
+     * !주의 count 쿼리가 실행되니 주의
+     */
+    @Test
+    public void paging2() {
+        QueryResults<Member> memberQueryResults = queryFactory
+                .selectFrom(member)
+                .orderBy(member.username.desc())
+                .offset(1)
+                .limit(2)
+                .fetchResults();
+
+        assertThat(memberQueryResults.getTotal()).isEqualTo(4);
+        assertThat(memberQueryResults.getLimit()).isEqualTo(2);
+        assertThat(memberQueryResults.getOffset()).isEqualTo(1);
+        assertThat(memberQueryResults.getResults().size()).isEqualTo(2);
+    }
+
+
+    /**
+     * 그룹함수
+     */
+    @Test
+    public void aggregation() {
+        Tuple tuple = queryFactory
+                .select(member.count(),
+                        member.age.sum(),
+                        member.age.max(),
+                        member.age.min())
+                .from(member)
+                .fetchOne();
+        assertThat(tuple.get(member.count())).isEqualTo(4);
+        assertThat(tuple.get(member.age.sum())).isEqualTo(100);
+        assertThat(tuple.get(member.age.max())).isEqualTo(40);
+        assertThat(tuple.get(member.age.min())).isEqualTo(10);
+    }
+
+    /**
+     * GroupBy 사용
+     */
+    @Test
+    public void group() {
+        List<Tuple> fetch = queryFactory
+                .select(team.name, member.age.avg())
+                .from(member)
+                .join(member.team)
+                .groupBy(team.name)
+                .fetch();
+
+        Tuple teamA = fetch.get(0);
+        Tuple teamB = fetch.get(1);
+
+        assertThat(teamA.get(team.name)).isEqualTo("teamA");
+        assertThat(teamA.get(member.age.avg())).isEqualTo(10);
+
+        assertThat(teamB.get(team.name)).isEqualTo("teamB");
+        assertThat(teamB.get(member.age.avg())).isEqualTo(35);
+
+    }
+
+    /**
+     * join - 기본조인
+     * 조인의 기본 문법은 첫 번째 파라미터에 조인 대상을 지정하고, 두 번째 파라미터에 별칭(alias)으로 사용할 Q 타입을 지정하면 된다.
+     */
+
+    /**
+     * 팀 A에 소속된 모든 회원
+     */
+    @Test
+    public void join() {
+        List<Member> list = queryFactory
+                .selectFrom(member)
+                .join(member.team, team)
+                .where(member.team.name.eq("teamA"))
+                .fetch();
+
+        System.out.println("teamA = " + list);
+        assertThat(list)
+                .extracting("username")
+                .containsExactly("member1", "member2");
+    }
+
+    /**
+     * 세타조인
+     * 연관관계가 없는 필드로 조인
+     * 회원의 이름이 팀 이름과 같은 회원 조회
+     */
+    @Test
+    public void theta_join() {
+        em.persist(new Member("teamA"));
+        em.persist(new Member("teamB"));
+
+        List<Member> fetch = queryFactory
+                .select(member)
+                .from(member, team)
+                .where(member.username.eq(team.name))
+                .fetch();
+
+        assertThat(fetch)
+                .extracting("username")
+                .containsExactly("teamA", "teamB");
+    }
+
 }
 
 
